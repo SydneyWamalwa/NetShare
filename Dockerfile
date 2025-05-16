@@ -59,6 +59,8 @@
     # Switch to non-root user
     USER appuser
 
+    ENV PATH=/root/.local/bin:$PATH
+
     # Health check
     HEALTHCHECK --interval=30s --timeout=3s \
         CMD curl -f http://localhost:5000/health || exit 1
