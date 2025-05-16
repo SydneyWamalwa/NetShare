@@ -1,0 +1,65 @@
+version: '3'
+
+services:
+  web:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=development
+      - SECRET_KEY=dev-secret-key
+      - DATABASE_URL=sqlite:///netshare.db
+      - FLY_API_KEY=${FLY_API_KEY}
+    volumes:
+      - .:/app
+    depends_on:
+      - tunnel-manager
+    restart: always
+
+  tunnel-manager:
+    build:
+      context: .
+      dockerfile: Dockerfile.tunnel-manager
+    environment:
+      - DATABASE_URL=sqlite:///netshare.db
+      - FLY_API_KEY=${FLY_API_KEY}
+    volumes:
+      - .:/app
+    restart: always
+
+  # For production, you'd have a separate database service
+  # db:
+  #   image: postgres:13
+  #   environment:
+  #     - POSTGRES_USER=netshare
+  #     - POSTGRES_PASSWORD=netshare
+  #     - POSTGRES_DB=netshare
+  #   volumes:
+  #     - db-data:/var/lib/postgresql/data
+  #   restart: always
+
+  # Optional: Add monitoring service
+  # prometheus:
+  #   image: prom/prometheus
+  #   volumes:
+  #     - ./prometheus:/etc/prometheus
+  #     - prometheus-data:/prometheus
+  #   ports:
+  #     - "9090:9090"
+  #   restart: always
+
+  # Optional: Add visualization
+  # grafana:
+  #   image: grafana/grafana
+  #   depends_on:
+  #     - prometheus
+  #   ports:
+  #     - "3000:3000"
+  #   volumes:
+  #     - grafana-data:/var/lib/grafana
+  #   restart: always
+
+# volumes:
+#   db-data:
+#   prometheus-data:
+#   grafana-data:

@@ -1,0 +1,15 @@
+<!-- templates/verify.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Verify OTP</title>
+</head>
+<body>
+    <h1>Enter OTP to Verify</h1>
+    <form method="post">
+        {{ form.hidden_tag() }}
+        {{ form.otp.label }} {{ form.otp(size=10) }}<br><br>
+        {{ form.submit() }}
+    </form>
+</body>
+</html>

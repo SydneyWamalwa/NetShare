@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8">
+    <div class="card shadow-sm">
+      <div class="card-header bg-primary text-white">
+        <h3 class="mb-0">Client Dashboard</h3>
+      </div>
+      <div class="card-body">
+        <div class="alert alert-info" role="alert">
+          <h5>Welcome {{ user.phone }}!</h5>
+          <p>Connect to available NetShare bandwidth from anywhere on Earth.</p>
+        </div>
+
+        <div class="text-center py-4">
+          <div id="connection-status" class="mb-4">
+            <div class="status-indicator {% if connection %}online{% else %}offline{% endif %}"></div>
+            <p id="status-text" class="mt-2">
+              {% if connection %}
+                Connected to NetShare
+              {% else %}
+                Not Connected
+              {% endif %}
+            </p>
+          </div>
+
+          <form method="post" novalidate>
+            {{ form.hidden_tag() }}
+            {% if connection %}
+              {{ form.disconnect(class="btn btn-danger btn-lg") }}
+            {% else %}
+              {{ form.connect(class="btn btn-primary btn-lg") }}
+            {% endif %}
+          </form>
+        </div>
+
+        <div class="mt-4" id="connection-details" {% if not connection %}style="display:none;"{% endif %}>
+          <h5>Connection Details</h5>
+          <div class="card">
+            <div class="card-body">
+              <p><strong>Status:</strong>
+                <span class="badge bg-success">Active</span>
+              </p>
+              <p><strong>Provider ID:</strong>
+                {% if connection %}{{ connection.sharer_phone[-4:] }}{% else %}--{% endif %}
+              </p>
+              <p><strong>Connection Quality:</strong>
+                <span class="text-success">
+                  <i class="bi bi-reception-4"></i> Excellent
+                </span>
+              </p>
+              <p><strong>Data Used:</strong>
+                {% if connection %}{{ "%.2f"|format(connection.bandwidth_used) }} GB{% else %}0 GB{% endif %}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-4" id="available-networks" {% if connection %}style="display:none;"{% endif %}>
+          <h5>Available Networks</h5>
+          <div class="networks-container">
+            <div class="d-flex justify-content-center">
+              <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Fetch available networks when not connected
+function fetchAvailableNetworks() {
+  if (document.getElementById('available-networks').style.display !== 'none') {
+    fetch('/api/network/available')
+      .then(response => response.json())
+      .then(data => {
+        const networksContainer = document.querySelector('.networks-container');
+        if (data.networks && data.networks.length > 0) {
+          let html = '<ul class="list-group">';
+          data.networks.forEach(network => {
+            const signalClass = network.signal_quality === 'good' ? 'bg-success' : 'bg-warning';
+            html += `
+              <li class="list-group-item d-flex justify-content-between align-items-center">
+                NetShare User ${network.sharer_id}
+                <div>
+                  <span class="badge bg-primary me-2">${network.available_gb.toFixed(1)} GB Available</span>
+                  <span class="badge ${signalClass}">${network.signal_quality === 'good' ? 'Good' : 'Fair'} Signal</span>
+                </div>
+              </li>
+            `;
+          });
+          html += '</ul>';
+          networksContainer.innerHTML = html;
+        } else {
+          networksContainer.innerHTML = '<div class="alert alert-warning">No networks available at this time. Please try again later.</div>';
+        }
+      })
+      .catch(error => {
+        console.error('Error fetching networks:', error);
+        document.querySelector('.networks-container').innerHTML =
+          '<div class="alert alert-danger">Error loading available networks. Please refresh the page.</div>';
+      });
+  }
+}
+
+// Update connection status periodically
+function updateConnectionStatus() {
+  fetch('/api/connections/status')
+    .then(response => response.json())
+    .then(data => {
+      const statusIndicator = document.querySelector('.status-indicator');
+      const statusText = document.getElementById('status-text');
+      const connectionDetails = document.getElementById('connection-details');
+      const availableNetworks = document.getElementById('available-networks');
+
+      if (data.connection) {
+        // Connected
+        statusIndicator.classList.remove('offline');
+        statusIndicator.classList.add('online');
+        statusText.textContent = 'Connected to NetShare';
+        connectionDetails.style.display = 'block';
+        availableNetworks.style.display = 'none';
+
+        // Update connection details
+        document.querySelector('#connection-details .badge').className =
+          data.connection.status === 'active' ? 'badge bg-success' : 'badge bg-warning';
+        document.querySelector('#connection-details .badge').textContent =
+          data.connection.status === 'active' ? 'Active' : 'Unstable';
+
+        // Update usage
+        const usageElem = document.querySelector('#connection-details p:last-child');
+        usageElem.innerHTML = `<strong>Data Used:</strong> ${data.connection.bandwidth_used.toFixed(2)} GB`;
+      } else {
+        // Not connected
+        statusIndicator.classList.remove('online');
+        statusIndicator.classList.add('offline');
+        statusText.textContent = 'Not Connected';
+        connectionDetails.style.display = 'none';
+        availableNetworks.style.display = 'block';
+
+        // Refresh available networks list
+        fetchAvailableNetworks();
+      }
+    })
+    .catch(error => {
+      console.error('Error updating connection status:', error);
+    });
+}
+
+// Initial load
+document.addEventListener('DOMContentLoaded', function() {
+  fetchAvailableNetworks();
+
+  // Update status every 10 seconds
+  setInterval(updateConnectionStatus, 10000);
+});
+</script>
+
+<style>
+.status-indicator {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  margin: 0 auto;
+  border: 3px solid #ddd;
+}
+.status-indicator.online {
+  background-color: #28a745;
+  box-shadow: 0 0 15px rgba(40, 167, 69, 0.5);
+}
+.status-indicator.offline {
+  background-color: #dc3545;
+  box-shadow: 0 0 15px rgba(220, 53, 69, 0.5);
+}
+</style>
+{% endblock %}

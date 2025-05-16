@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+<head><title>Signup</title></head>
+<body>
+  <h2>Sign Up</h2>
+  <form method="POST">
+    {{ form.hidden_tag() }}
+    {{ form.phone.label }} {{ form.phone(size=32) }}<br>
+    {{ form.role.label }} {{ form.role(size=32) }}<br>
+    {{ form.submit() }}
+  </form>
+  <p>Already have an account? <a href="{{ url_for('login') }}">Login</a></p>
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+      <div class="flash {{ category }}">{{ message }}</div>
+    {% endfor %}
+  {% endwith %}
+</body>
+</html>

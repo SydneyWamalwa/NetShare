@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8">
+    <div class="card shadow-sm">
+      <div class="card-header bg-primary text-white">
+        <h3 class="mb-0">Sharer Dashboard</h3>
+      </div>
+      <div class="card-body">
+        <div class="alert alert-info" role="alert">
+          <h5>Welcome {{user.phone}}!</h5>
+          <p>Configure your sharing settings below. Your current status is:
+            <span class="badge {% if user.sharing_active %}bg-success{% else %}bg-secondary{% endif %}">
+              {% if user.sharing_active %}Active Sharer{% else %}Inactive{% endif %}
+            </span>
+          </p>
+        </div>
+
+        <form method="post" novalidate>
+          {{ form.hidden_tag() }}
+
+          <div class="mb-4">
+            <label for="limit_range" class="form-label">
+              {{ form.limit_gb.label }}
+              <span class="badge bg-primary">{{ form.limit_gb.data }} GB</span>
+            </label>
+            <input type="range" class="form-range" id="limit_range" min="1" max="100"
+                  value="{{ form.limit_gb.data }}" oninput="updateSliderValue(this.value)">
+            {{ form.limit_gb(style="display:none", id="limit_gb_input") }}
+          </div>
+
+          <div class="form-check form-switch mb-4">
+            {{ form.sharing(class="form-check-input") }}
+            {{ form.sharing.label(class="form-check-label") }}
+          </div>
+
+          <div class="d-grid gap-2">
+            {{ form.submit(class="btn btn-success") }}
+          </div>
+        </form>
+
+        <div class="mt-4">
+          <h5>Data Sharing Statistics</h5>
+          <div class="progress mb-3">
+            {% set percentage = (user.shared_data / user.limit_gb) * 100 %}
+            <div class="progress-bar" role="progressbar"
+                 style="width: {{ percentage if percentage <= 100 else 100 }}%;"
+                 aria-valuenow="{{ user.shared_data }}"
+                 aria-valuemin="0"
+                 aria-valuemax="{{ user.limit_gb }}">
+              {{ "%.2f"|format(user.shared_data) }} GB Used
+            </div>
+          </div>
+          <p class="small text-muted">Today's usage: {{ "%.2f"|format(user.shared_data) }} GB of {{ user.limit_gb }} GB</p>
+        </div>
+
+        <div class="mt-4">
+          <h5>Active Connections <span class="badge bg-primary">{{ connected_clients }}</span></h5>
+          <div class="table-responsive">
+            <table class="table table-sm">
+              <thead>
+                <tr>
+                  <th>Client ID</th>
+                  <th>Connected Since</th>
+                  <th>Data Used</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for connection in active_connections %}
+                {% if connection.client_phone %}
+                <tr>
+                  <td>{{ connection.client_phone[-4:] }}</td>
+                  <td>{{ connection.created_at.strftime('%H:%M:%S') }}</td>
+                  <td>{{ "%.2f"|format(connection.bandwidth_used) }} GB</td>
+                </tr>
+                {% endif %}
+                {% else %}
+                <tr>
+                  <td colspan="3" class="text-center">No active clients</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="mt-4">
+          <h5>Fly.io Status</h5>
+          <div class="card">
+            <div class="card-body">
+              <p class="mb-1">
+                <strong>Instance:</strong>
+                {% for connection in active_connections %}
+                {% if loop.first %}
+                <span class="text-success">{{ connection.fly_instance }}</span>
+                {% endif %}
+                {% else %}
+                <span class="text-secondary">Not active</span>
+                {% endfor %}
+              </p>
+              <p class="mb-0">
+                <strong>Status:</strong>
+                {% if user.sharing_active %}
+                <span class="badge bg-success">Running</span>
+                {% else %}
+                <span class="badge bg-secondary">Stopped</span>
+                {% endif %}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function updateSliderValue(value) {
+  document.querySelector('.badge.bg-primary').textContent = value + ' GB';
+  document.getElementById('limit_gb_input').value = value;
+}
+
+// Update status every 30 seconds
+setInterval(function() {
+  fetch('/api/connections/status')
+    .then(response => response.json())
+    .then(data => {
+      // Update shared data
+      document.querySelector('.progress-bar').style.width =
+        ((data.shared_data / data.limit_gb) * 100) + '%';
+      document.querySelector('.progress-bar').setAttribute('aria-valuenow', data.shared_data);
+      document.querySelector('.progress-bar').textContent = data.shared_data.toFixed(2) + ' GB Used';
+      document.querySelector('.small.text-muted').textContent =
+        'Today\'s usage: ' + data.shared_data.toFixed(2) + ' GB of ' + data.limit_gb + ' GB';
+
+      // TODO: Update active connections table dynamically
+    });
+}, 30000);
+</script>
+{% endblock %}

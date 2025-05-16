@@ -1,0 +1,53 @@
+# fly.toml app configuration file generated for netshare on 2025-05-15T18:36:12+03:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'netshare'
+primary_region = 'jnb'
+
+[build]
+  dockerfile = "Dockerfile"
+
+
+[env]
+  DATABASE_URL = '${DATABASE_URL}'
+  FLASK_ENV = 'production'
+  FLY_API_KEY = '${FLY_API_KEY}'
+  SECRET_KEY = '${SECRET_KEY}'
+
+[processes]
+  tunnel-manager = 'python tunnel_manager.py'
+  web = 'gunicorn -w 4 app:app --bind 0.0.0.0:8080'
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8080
+  processes = ['web']
+
+  [[services.ports]]
+    port = 80
+    handlers = ['http']
+
+  [[services.ports]]
+    port = 8080
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 0
+  auto_stop_machines = 'off'
+  ports = []
+  processes = ['tunnel-manager']
+
+[checks]
+  [checks.web-http]
+    port = 8080
+    type = 'http'
+    interval = '15s'
+    timeout = '3s'
+    path = '/health'
+
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1

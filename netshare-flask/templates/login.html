@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center mt-5">
+  <div class="col-md-5 col-lg-4">
+    <div class="card shadow-sm">
+      <div class="card-body p-4">
+        <h3 class="card-title text-center mb-4">Login to NetShare</h3>
+        <form method="post" novalidate>
+          {{ form.hidden_tag() }}
+          <div class="mb-3">
+            {{ form.phone.label(class="form-label") }}
+            {% if form.phone.errors %}
+              {{ form.phone(class="form-control is-invalid") }}
+              <div class="invalid-feedback">
+                {% for error in form.phone.errors %}
+                  {{ error }}
+                {% endfor %}
+              </div>
+            {% else %}
+              {{ form.phone(class="form-control", placeholder="10 digit phone number") }}
+            {% endif %}
+          </div>
+          <div class="d-grid gap-2">
+            {{ form.submit(class="btn btn-primary btn-lg") }}
+          </div>
+          <p>New here? <a href="{{ url_for('signup') }}">Create an account</a></p>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
