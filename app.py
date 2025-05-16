@@ -298,9 +298,14 @@ def login():
             session['phone_tmp'] = phone
             totp = pyotp.TOTP(secret)
             otp = totp.now()
-            # In production, send the OTP via SMS
-            print(f"OTP for {phone}: {otp}")
-            flash("OTP sent to your phone", "info")
+
+            # Store OTP in session to display on verification page
+            session['current_otp'] = otp
+
+            # Log OTP for development purposes
+            logger.info(f"OTP for {phone}: {otp}")
+
+            flash("OTP generated. See it on the verification page.", "info")
             return redirect(url_for('verify_otp'))
         flash('Unknown phone number', 'danger')
     return render_template('login.html', form=form)
@@ -308,16 +313,19 @@ def login():
 @app.route('/verify', methods=['GET', 'POST'])
 def verify_otp():
     form = OTPForm()
+    otp_to_display = session.get('current_otp')
+    phone = session.get('phone_tmp')
+
     if form.validate_on_submit():
         otp = form.otp.data
         secret = session.get('otp_secret')
-        phone = session.get('phone_tmp')
         totp = pyotp.TOTP(secret)
 
         if totp.verify(otp, valid_window=1):  # allows +/- 30 seconds (1 window)
             session['phone'] = phone  # Set the phone in the session
             session.pop('otp_secret', None)
             session.pop('phone_tmp', None)
+            session.pop('current_otp', None)  # Remove displayed OTP from session
             flash('OTP verified. Logged in.', 'success')
             logger.info(f"OTP verified for {phone}. Redirecting to dashboard.")
             return redirect(url_for('dashboard'))
@@ -325,7 +333,7 @@ def verify_otp():
             flash('Invalid OTP. Try again.', 'danger')
             logger.warning(f"Invalid OTP for {phone}")
 
-    return render_template('verify.html', form=form)
+    return render_template('verify.html', form=form, otp_to_display=otp_to_display, phone=phone)
 
 @app.route('/dashboard', methods=['GET', 'POST'])
 @login_required

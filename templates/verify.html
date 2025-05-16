@@ -1,15 +1,57 @@
-<!-- templates/verify.html -->
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Verify OTP</title>
-</head>
-<body>
-    <h1>Enter OTP to Verify</h1>
-    <form method="post">
-        {{ form.hidden_tag() }}
-        {{ form.otp.label }} {{ form.otp(size=10) }}<br><br>
-        {{ form.submit() }}
-    </form>
-</body>
-</html>
+{% extends "base.html" %}
+
+{% block title %}Verify OTP{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Verify OTP</h3>
+                </div>
+                <div class="card-body">
+                    {% if otp_to_display %}
+                    <div class="alert alert-info">
+                        <h4>Your OTP for verification:</h4>
+                        <div class="otp-display">
+                            <span class="otp-code">{{ otp_to_display }}</span>
+                        </div>
+                        <p class="mt-2">For phone number: <strong>{{ phone }}</strong></p>
+                        <p class="small text-muted">In production, this would be sent via SMS</p>
+                    </div>
+                    {% endif %}
+
+                    <form method="POST" action="{{ url_for('verify_otp') }}">
+                        {{ form.hidden_tag() }}
+                        <div class="form-group">
+                            {{ form.otp.label(class="form-label") }}
+                            {{ form.otp(class="form-control", placeholder="Enter the OTP sent to your phone") }}
+                        </div>
+                        <div class="form-group mt-3">
+                            {{ form.submit(class="btn btn-primary w-100") }}
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .otp-display {
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 5px;
+        font-size: 24px;
+        text-align: center;
+        letter-spacing: 5px;
+        margin: 10px 0;
+        border: 1px dashed #dee2e6;
+    }
+    .otp-code {
+        font-weight: bold;
+        color: #0d6efd;
+    }
+</style>
+{% endblock %}
