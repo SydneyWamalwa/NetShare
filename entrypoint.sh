@@ -8,5 +8,5 @@ frps -c /app/frps.ini &
 sleep 2
 
 # launch Flask
-exec gunicorn --bind 0.0.0.0:5000 wsgi:app
+exec gunicorn --bind 0.0.0.0:5000 app:app
 
