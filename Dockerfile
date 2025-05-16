@@ -7,13 +7,16 @@
 
     # Install build dependencies
     RUN apt-get update && \
-        apt-get install -y --no-install-recommends gcc python3-dev && \
+        apt-get install -y --no-install-recommends gcc python3-dev libffi-dev && \
         rm -rf /var/lib/apt/lists/*
 
-    # Install Python dependencies
-    COPY requirements.txt .
-    RUN pip install --no-cache-dir -r requirements.txt
+    # Create virtual environment
+    RUN python -m venv /opt/venv
 
+    # Ensure pip is up to date
+    ENV PATH="/opt/venv/bin:$PATH"
+    COPY requirements.txt .
+    RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
     # --------------------
     # Stage 2: Runtime
@@ -22,8 +25,8 @@
 
     WORKDIR /app
 
-    # Copy installed Python packages from builder
-    COPY --from=builder /root/.local /root/.local
+    # Copy virtualenv from builder
+    COPY --from=builder /opt/venv /opt/venv
 
     # Install runtime dependencies
     RUN apt-get update && \
@@ -44,25 +47,23 @@
     # Copy application code
     COPY . .
 
-    # Copy entrypoint script and set permissions BEFORE switching user
+    # Copy and allow execution of entrypoint script
     COPY entrypoint.sh /app/
     RUN chmod +x /app/entrypoint.sh
 
-    # Ensure PATH includes user-installed binaries
-    ENV PATH=/root/.local/bin:$PATH
+    # Set PATH to include venv
+    ENV PATH="/opt/venv/bin:$PATH"
 
-    # Expose ports (Flask and FRP)
-    EXPOSE 5000 8080
+    # Expose Flask and FRP dashboard ports
+    EXPOSE 5000 8080 7000 7500
 
-    # Create a non-root user and change ownership
+    # Create non-root user
     RUN useradd -m appuser && chown -R appuser /app
 
     # Switch to non-root user
     USER appuser
 
-    ENV PATH=/root/.local/bin:$PATH
-
-    # Health check
+    # Health check for Flask
     HEALTHCHECK --interval=30s --timeout=3s \
         CMD curl -f http://localhost:5000/health || exit 1
 
