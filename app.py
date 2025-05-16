@@ -175,72 +175,72 @@ class FlyNetworkManager:
         }
 
     # Enhanced FlyNetworkManager with real tunnel creation
-@classmethod
-def create_tunnel(cls, user_id):
-    """Create a real tunnel using WireGuard or SSH"""
-    try:
-        # Generate WireGuard config
-        wg_config = generate_wireguard_config(user_id)
+    @classmethod
+    def create_tunnel(cls, user_id):
+        """Create a real tunnel using WireGuard or SSH"""
+        try:
+            # Generate WireGuard config
+            wg_config = generate_wireguard_config(user_id)
 
-        # Deploy to fly.io
-        response = requests.post(
-            f"{cls.BASE_URL}/apps/netshare-tunnels/machines",
-            headers=cls.get_headers(),
-            json={
-                "name": f"tunnel-{user_id}",
-                "config": {
-                    "image": "netshare/tunnel:latest",
-                    "env": {
-                        "WG_CONFIG": wg_config,
-                        "USER_ID": user_id
+            # Deploy to fly.io
+            response = requests.post(
+                f"{cls.BASE_URL}/apps/netshare-tunnels/machines",
+                headers=cls.get_headers(),
+                json={
+                    "name": f"tunnel-{user_id}",
+                    "config": {
+                        "image": "netshare/tunnel:latest",
+                        "env": {
+                            "WG_CONFIG": wg_config,
+                            "USER_ID": user_id
+                        }
                     }
                 }
-            }
-        )
+            )
 
-        return {
-            'success': True,
-            'instance_id': response.json()['id'],
-            'proxy_url': f"tunnel-{user_id}.netshare.internal",
-            'port': 51820  # WireGuard port
-        }
-    except Exception as e:
-        logger.error(f"Tunnel creation failed: {str(e)}")
-        return {'success': False, 'error': str(e)}
-
-    @classmethod
-    def terminate_tunnel(cls, instance_id):
-        """Terminate a fly.io tunnel instance"""
-        try:
-            # This would call the fly.io API to destroy the instance
-            logger.info(f"Terminating fly.io tunnel: {instance_id}")
-            return {'success': True}
-        except Exception as e:
-            logger.error(f"Error terminating fly.io tunnel: {str(e)}")
-            return {'success': False, 'error': str(e)}
-
-    @classmethod
-    def get_active_tunnels(cls):
-        """Get list of active tunnels"""
-        # In a real implementation, this would query the fly.io API
-        try:
-            active_tunnels = Connection.query.filter_by(status='active').all()
             return {
                 'success': True,
-                'tunnels': [
-                    {
-                        'instance_id': conn.fly_instance,
-                        'sharer_id': conn.sharer_phone,
-                        'client_id': conn.client_phone,
-                        'last_active': conn.last_active.isoformat(),
-                        'bandwidth_used': conn.bandwidth_used
-                    }
-                    for conn in active_tunnels
-                ]
+                'instance_id': response.json()['id'],
+                'proxy_url': f"tunnel-{user_id}.netshare.internal",
+                'port': 51820  # WireGuard port
             }
         except Exception as e:
-            logger.error(f"Error fetching active tunnels: {str(e)}")
+            logger.error(f"Tunnel creation failed: {str(e)}")
             return {'success': False, 'error': str(e)}
+
+        @classmethod
+        def terminate_tunnel(cls, instance_id):
+            """Terminate a fly.io tunnel instance"""
+            try:
+                # This would call the fly.io API to destroy the instance
+                logger.info(f"Terminating fly.io tunnel: {instance_id}")
+                return {'success': True}
+            except Exception as e:
+                logger.error(f"Error terminating fly.io tunnel: {str(e)}")
+                return {'success': False, 'error': str(e)}
+
+        @classmethod
+        def get_active_tunnels(cls):
+            """Get list of active tunnels"""
+            # In a real implementation, this would query the fly.io API
+            try:
+                active_tunnels = Connection.query.filter_by(status='active').all()
+                return {
+                    'success': True,
+                    'tunnels': [
+                        {
+                            'instance_id': conn.fly_instance,
+                            'sharer_id': conn.sharer_phone,
+                            'client_id': conn.client_phone,
+                            'last_active': conn.last_active.isoformat(),
+                            'bandwidth_used': conn.bandwidth_used
+                        }
+                        for conn in active_tunnels
+                    ]
+                }
+            except Exception as e:
+                logger.error(f"Error fetching active tunnels: {str(e)}")
+                return {'success': False, 'error': str(e)}
 
 # Background task to monitor network stability and switch connections if needed
 def monitor_connections():
