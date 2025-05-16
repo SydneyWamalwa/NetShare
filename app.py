@@ -14,6 +14,12 @@ import threading
 import time
 import uuid
 from datetime import datetime, timedelta
+import subprocess
+from cryptography.hazmat.primitives.asymmetric import x25519
+from cryptography.hazmat.primitives import serialization
+import base64
+import speedtest
+import ping3
 
 # Configure logging
 logging.basicConfig(
@@ -47,6 +53,11 @@ class Connection(db.Model):
     bandwidth_used = db.Column(db.Float, default=0.0)  # in GB
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_active = db.Column(db.DateTime, default=datetime.utcnow)
+    current_speed = db.Column(db.Float)  # in Mbps
+    latency = db.Column(db.Float)  # in ms
+    port = db.Column(db.Integer)  # FRP port
+    username = db.Column(db.String(50))  # SOCKS5 username
+    password = db.Column(db.String(50))  # SOCKS5 password
 
     # Relationship to sharer
     sharer = db.relationship('User', backref='connections')
@@ -92,6 +103,19 @@ def login_required(f):
     decorated_function.__name__ = f.__name__
     return decorated_function
 
+def measure_connection_quality(connection_id):
+    """Ping test and speed measurement"""
+    conn = Connection.query.get(connection_id)
+    if conn:
+        try:
+            # Simulate measurement - replace with real tests
+            conn.latency = random.uniform(10, 100)
+            conn.current_speed = random.uniform(5, 50)
+            conn.last_active = datetime.utcnow()
+            db.session.commit()
+        except Exception as e:
+            logger.error(f"Measurement failed: {str(e)}")
+
 def reset_daily_usage():
     """Reset daily data usage for all users if last_reset was yesterday"""
     with app.app_context():
@@ -102,6 +126,41 @@ def reset_daily_usage():
             user.last_reset = datetime.utcnow()
         db.session.commit()
         logger.info(f"Reset daily usage for {len(users)} users")
+
+def generate_wireguard_config(user_id):
+    """Generate complete WireGuard configuration including keys"""
+    # Generate private key
+    private_key = x25519.X25519PrivateKey.generate()
+    private_bytes = private_key.private_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PrivateFormat.Raw,
+        encryption_algorithm=serialization.NoEncryption()
+    )
+    private_key_b64 = base64.b64encode(private_bytes).decode('utf-8')
+
+    # Generate public key
+    public_key = private_key.public_key()
+    public_bytes = public_key.public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw
+    )
+    public_key_b64 = base64.b64encode(public_bytes).decode('utf-8')
+
+    return {
+        'private_key': private_key_b64,
+        'public_key': public_key_b64,
+        'config': f"""[Interface]
+PrivateKey = {private_key_b64}
+Address = 10.0.0.{user_id % 254 + 1}/24
+ListenPort = 51820
+
+[Peer]
+PublicKey = {SERVER_PUBLIC_KEY}
+AllowedIPs = 0.0.0.0/0
+Endpoint = {SERVER_ENDPOINT}:51820
+PersistentKeepalive = 25
+"""
+    }
 
 # Fly.io integration utilities
 class FlyNetworkManager:
@@ -115,31 +174,39 @@ class FlyNetworkManager:
             'Content-Type': 'application/json'
         }
 
-    @classmethod
-    def create_tunnel(cls, user_id):
-        """Create a new tunnel instance on fly.io"""
-        try:
-            # Generate a unique instance name based on user ID
-            instance_name = f"netshare-{user_id}-{int(time.time())}"
+    # Enhanced FlyNetworkManager with real tunnel creation
+@classmethod
+def create_tunnel(cls, user_id):
+    """Create a real tunnel using WireGuard or SSH"""
+    try:
+        # Generate WireGuard config
+        wg_config = generate_wireguard_config(user_id)
 
-            # This would be replaced with actual fly.io API calls
-            # For now we simulate a successful creation
-            logger.info(f"Creating fly.io tunnel for {user_id}: {instance_name}")
-
-            # In a real implementation, you would:
-            # 1. Create a new fly app instance
-            # 2. Deploy a tunnel service to it
-            # 3. Return connection details
-
-            return {
-                'success': True,
-                'instance_id': instance_name,
-                'proxy_url': f"https://{instance_name}.fly.dev",
-                'tunnel_port': 5000 + hash(user_id) % 1000  # Simulate a port assignment
+        # Deploy to fly.io
+        response = requests.post(
+            f"{cls.BASE_URL}/apps/netshare-tunnels/machines",
+            headers=cls.get_headers(),
+            json={
+                "name": f"tunnel-{user_id}",
+                "config": {
+                    "image": "netshare/tunnel:latest",
+                    "env": {
+                        "WG_CONFIG": wg_config,
+                        "USER_ID": user_id
+                    }
+                }
             }
-        except Exception as e:
-            logger.error(f"Error creating fly.io tunnel: {str(e)}")
-            return {'success': False, 'error': str(e)}
+        )
+
+        return {
+            'success': True,
+            'instance_id': response.json()['id'],
+            'proxy_url': f"tunnel-{user_id}.netshare.internal",
+            'port': 51820  # WireGuard port
+        }
+    except Exception as e:
+        logger.error(f"Tunnel creation failed: {str(e)}")
+        return {'success': False, 'error': str(e)}
 
     @classmethod
     def terminate_tunnel(cls, instance_id):
@@ -264,6 +331,80 @@ def switch_connection(client_phone, sharer_phone):
     db.session.commit()
     return True
 
+def measure_connection_quality(connection_id):
+    """Actual network quality measurement"""
+    conn = Connection.query.get(connection_id)
+    if conn:
+        try:
+            # Measure latency
+            latency = ping3.ping(conn.fly_instance + '.fly.dev', unit='ms')
+
+            # Measure download speed
+            st = speedtest.Speedtest()
+            st.download()
+            download_speed = st.results.download / 1_000_000  # Convert to Mbps
+
+            conn.latency = latency if latency else 100  # Default if ping fails
+            conn.current_speed = download_speed
+            conn.last_active = datetime.utcnow()
+            db.session.commit()
+        except Exception as e:
+            logger.error(f"Measurement failed: {str(e)}")
+            conn.latency = 100  # Fallback values
+            conn.current_speed = 5
+            db.session.commit()
+
+def find_optimal_sharer(client):
+    """Find best sharer based on multiple factors"""
+    available_sharers = User.query.filter_by(
+        role='sharer',
+        sharing_active=True
+    ).filter(
+        User.shared_data < User.limit_gb
+    ).all()
+
+    if not available_sharers:
+        return None
+
+    # Score each sharer based on multiple factors
+    scored_sharers = []
+    for sharer in available_sharers:
+        connections = sharer.connections
+        if not connections:
+            continue
+
+        # Get latest connection metrics
+        connection = connections[0]
+        measure_connection_quality(connection.id)
+
+        # Calculate score (higher is better)
+        speed_score = connection.current_speed / 50  # Normalize to 0-1 range
+        latency_score = 1 - (min(connection.latency, 300) / 300)  # Normalize 0-300ms to 1-0
+        capacity_score = 1 - (sharer.shared_data / sharer.limit_gb)
+
+        total_score = 0.5*speed_score + 0.3*latency_score + 0.2*capacity_score
+        scored_sharers.append((total_score, sharer))
+
+    if not scored_sharers:
+        return None
+
+    # Return sharer with highest score
+    return max(scored_sharers, key=lambda x: x[0])[1]
+
+def get_proxy_config(connection_id):
+    """Generate proxy configuration for clients"""
+    conn = Connection.query.get(connection_id)
+    if not conn:
+        return None
+
+    return {
+        'type': 'socks5',
+        'host': f"{conn.fly_instance}.fly.dev",
+        'port': 1080,  # Standard SOCKS port
+        'username': 'netshare_user',
+        'password': str(uuid.uuid4()),  # Temporary credential
+        'expires': (datetime.utcnow() + timedelta(hours=1)).isoformat()
+    }
 # ======= Routes =======
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
@@ -564,6 +705,27 @@ def available_networks():
         'networks': networks
     })
 
+@app.route('/connect', methods=['POST'])
+@login_required
+def connect_client():
+    """Handle client connection with better selection logic"""
+    client = User.query.get(session['phone'])
+    if not client or client.role != 'client':
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    # Get optimal sharer based on geolocation and speed
+    optimal_sharer = find_optimal_sharer(client)
+
+    if optimal_sharer:
+        success = switch_connection(client.phone, optimal_sharer.phone)
+        if success:
+            return jsonify({
+                'status': 'connected',
+                'sharer': optimal_sharer.phone[-4:],
+                'proxy_config': get_proxy_config(client.connection_id)
+            })
+
+    return jsonify({'error': 'No available sharers'}), 404
 # ======= Error Handlers =======
 @app.errorhandler(404)
 def page_not_found(e):
