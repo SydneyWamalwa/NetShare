@@ -14,11 +14,15 @@ COPY . .
 EXPOSE 8080
 EXPOSE 5000
 
-# Example for Linux amd64 (adjust for your architecture)
+# Install curl, tar, and other dependencies
+RUN apt-get update && apt-get install -y curl tar && rm -rf /var/lib/apt/lists/*
+
+# Download and install FRP
 RUN curl -L -o frp.tar.gz https://github.com/fatedier/frp/releases/download/v0.58.0/frp_0.58.0_linux_amd64.tar.gz \
  && tar -xzf frp.tar.gz \
  && cp frp_0.58.0_linux_amd64/frps /usr/local/bin/frps \
- && chmod +x /usr/local/bin/frps
+ && chmod +x /usr/local/bin/frps \
+ && rm -rf frp.tar.gz frp_0.58.0_linux_amd64
 
 
 # Entrypoint to launch both
